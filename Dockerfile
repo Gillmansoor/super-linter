@@ -69,6 +69,7 @@ RUN apk add --no-cache \
 SHELL ["/bin/bash", "-o", "errexit", "-o", "nounset", "-o", "pipefail", "-c"]
 
 COPY dependencies/python/ /stage
+COPY scripts/build-venvs.sh /stage/
 WORKDIR /stage
 RUN ./build-venvs.sh && rm -rfv /stage
 
@@ -446,6 +447,13 @@ ENTRYPOINT ["/action/lib/linter.sh"]
 
 RUN if [ ! -e "/usr/bin/php" ]; then ln -s /usr/bin/php84 /usr/bin/php; fi
 
+# Consider directories safe for Git because users might run Super-linter as an
+# arbitrary user. Also, some tools like commitlint and golangci-lint expect that
+# Git directories they interact with are to be considered safe.
+# Keep this in a dedicated RUN instruction for clarity
+# hadolint ignore=DL3059
+RUN git config --system --add safe.directory "*"
+
 FROM base_image AS slim
 
 # Run to build version file and validate image
@@ -495,7 +503,7 @@ ARG TARGETARCH
 ENV ARM_TTK_PSD1="/usr/lib/microsoft/arm-ttk/arm-ttk.psd1"
 ENV PATH="${PATH}:/var/cache/dotnet/tools:/usr/share/dotnet"
 
-# Install super-linter runtime dependencies
+# Install Rust linters
 RUN apk add --no-cache \
   rust-clippy \
   rustfmt

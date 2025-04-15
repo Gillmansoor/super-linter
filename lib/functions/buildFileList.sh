@@ -11,24 +11,20 @@ function IssueHintForFullGitHistory() {
 export -f IssueHintForFullGitHistory
 
 function GenerateFileDiff() {
-  local DIFF_GIT_DEFAULT_BRANCH_CMD
-  DIFF_GIT_DEFAULT_BRANCH_CMD="git -C \"${GITHUB_WORKSPACE}\" diff --diff-filter=d --name-only ${DEFAULT_BRANCH}...${GITHUB_SHA} | xargs -I % sh -c 'echo \"${GITHUB_WORKSPACE}/%\"' 2>&1"
-
-  if [ "${GITHUB_EVENT_NAME:-}" == "push" ]; then
-    local DIFF_TREE_CMD
-    if [[ "${GITHUB_SHA}" == "${GIT_ROOT_COMMIT_SHA}" ]]; then
-      GITHUB_BEFORE_SHA=""
-      debug "Set GITHUB_BEFORE_SHA (${GITHUB_BEFORE_SHA}) to an empty string because there's no commit before the initial commit to diff against."
-    fi
-    DIFF_TREE_CMD="git -C \"${GITHUB_WORKSPACE}\" diff-tree --no-commit-id --name-only -r --root ${GITHUB_SHA} ${GITHUB_BEFORE_SHA} | xargs -I % sh -c 'echo \"${GITHUB_WORKSPACE}/%\"' 2>&1"
-    RunFileDiffCommand "${DIFF_TREE_CMD}"
-    if [ ${#RAW_FILE_ARRAY[@]} -eq 0 ]; then
-      debug "Generating the file array with diff-tree produced [0] items, trying with git diff against the default branch..."
-      RunFileDiffCommand "${DIFF_GIT_DEFAULT_BRANCH_CMD}"
-    fi
+  local DIFF_TREE_CMD
+  local GIT_DIFF_TERM
+  if [[ "${GITHUB_SHA}" == "${GIT_ROOT_COMMIT_SHA}" ]]; then
+    GIT_DIFF_TERM=""
+    debug "Setting GIT_DIFF_TERM to an empty string because there's no commit before the initial commit to diff against."
+  elif [[ -z "${GITHUB_BEFORE_SHA:-""}" ]]; then
+    GIT_DIFF_TERM="${DEFAULT_BRANCH}"
+    debug "Setting GIT_DIFF_TERM to the value of DEFAULT_BRANCH because GITHUB_BEFORE_SHA was not initialized: ${GIT_DIFF_TERM}"
   else
-    RunFileDiffCommand "${DIFF_GIT_DEFAULT_BRANCH_CMD}"
+    GIT_DIFF_TERM="${GITHUB_BEFORE_SHA}"
+    debug "Setting GIT_DIFF_TERM to the value of GITHUB_BEFORE_SHA: ${GIT_DIFF_TERM}"
   fi
+  DIFF_TREE_CMD="git -C \"${GITHUB_WORKSPACE}\" diff-tree --no-commit-id --name-only -r --root ${GITHUB_SHA} ${GIT_DIFF_TERM} | xargs -I % sh -c 'echo \"${GITHUB_WORKSPACE}/%\"' 2>&1"
+  RunFileDiffCommand "${DIFF_TREE_CMD}"
 }
 
 function RunFileDiffCommand() {
@@ -126,10 +122,6 @@ function BuildFileList() {
     debug "DEFAULT_GIT_COMMITLINT_TEST_CASE_DIRECTORY: ${DEFAULT_GIT_COMMITLINT_TEST_CASE_DIRECTORY}"
     RAW_FILE_ARRAY+=("${DEFAULT_GIT_COMMITLINT_TEST_CASE_DIRECTORY}/bad")
     RAW_FILE_ARRAY+=("${DEFAULT_GIT_COMMITLINT_TEST_CASE_DIRECTORY}/good")
-    # Commitlint uses Git to get commit data, so the dynamically created test case repositories
-    # need to be marked as safe
-    git config --global --add safe.directory "${DEFAULT_GIT_COMMITLINT_TEST_CASE_DIRECTORY}/bad"
-    git config --global --add safe.directory "${DEFAULT_GIT_COMMITLINT_TEST_CASE_DIRECTORY}/good"
   fi
 
   debug "Add GITHUB_WORKSPACE (${GITHUB_WORKSPACE}) to the list of files to lint because we might need it for linters that lint the whole workspace"
